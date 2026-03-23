@@ -1,9 +1,7 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Optional
 import aiosqlite
-from datetime import datetime, timezone, timedelta
 
 
 app = FastAPI()

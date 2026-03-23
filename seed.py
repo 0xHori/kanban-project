@@ -3,7 +3,7 @@ from pathlib import Path
 
 import aiosqlite
 
-DB_PATH = Path("DataBase.db")
+DB_PATH = Path("Database.db")
 SCHEMA_PATH = Path("schema.sql")
 
 FIXED_TEST_TASKS = [

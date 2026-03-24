@@ -43,7 +43,7 @@ async def get_task_from_db(task_id: int) -> TaskRead:
             "SELECT id, task_name, task_description, status FROM tasks WHERE id = ?",
             (task_id,)
         )
-        row = await cur.fetchall()
+        row = await cur.fetchone()
 
         if row is None:
             raise HTTPException(status_code=404, detail="Задача не найдена")
@@ -56,7 +56,7 @@ async def get_task_from_db(task_id: int) -> TaskRead:
         )
 
 
-async def create_task(task_data: TaskCreate) -> dict:
+async def create_task(task_data: TaskCreate) -> TaskRead:
     async with aiosqlite.connect(DATABASE_FILE) as con:
         try:
             cur = await con.execute(
@@ -68,10 +68,12 @@ async def create_task(task_data: TaskCreate) -> dict:
             )
             await con.commit()
 
-            return {
-                "id": cur.lastrowid,
-                "message": "Задача создана",
-            }
+            return TaskRead(
+                id=cur.lastrowid,
+                task_name=task_data.task_name,
+                task_description=task_data.task_description,
+                status="open",
+            )
 
         except aiosqlite.IntegrityError as err:
             raise HTTPException(
@@ -83,7 +85,7 @@ async def create_task(task_data: TaskCreate) -> dict:
 
 @app.get("/")
 async def read_root():
-    return {"hello": "World"}
+    return {"service": "kanban-api"}
 
 
 @app.get("/health")
@@ -96,7 +98,7 @@ async def get_tasks():
     return await get_tasks_from_db()
 
 
-@app.post("/tasks", status_code=201)
+@app.post("/tasks", response_model=TaskRead, status_code=201)
 async def post_task(task: TaskCreate):
     return await create_task(task)
 

@@ -37,6 +37,23 @@ async def get_tasks_from_db() -> list[TaskRead]:
             for row in rows
         ]
 
+async def get_task_from_db(task_id: int) -> TaskRead:
+    async with aiosqlite.connect(DATABASE_FILE) as con:
+        cur = await con.execute(
+            "SELECT id, task_name, task_description, status FROM tasks WHERE id = ?",
+            (task_id,)
+        )
+        row = await cur.fetchall()
+
+        if row is None:
+            raise HTTPException(status_code=404, detail="Задача не найдена")
+        
+        return TaskRead(
+            id=row[0],
+            task_name=row[1],
+            task_description=row[2],
+            status=row[3],
+        )
 
 
 async def create_task(task_data: TaskCreate) -> dict:
@@ -63,9 +80,15 @@ async def create_task(task_data: TaskCreate) -> dict:
             )
 
 
+
 @app.get("/")
 async def read_root():
     return {"hello": "World"}
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
 
 
 @app.get("/tasks", response_model=list[TaskRead])
@@ -76,3 +99,10 @@ async def get_tasks():
 @app.post("/tasks", status_code=201)
 async def post_task(task: TaskCreate):
     return await create_task(task)
+
+
+@app.get("/tasks/{task_id}", response_model=TaskRead)
+async def get_task(task_id: int):
+    return await get_task_from_db(task_id)
+
+

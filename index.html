@@ -201,6 +201,16 @@
             box-shadow: 0 12px 26px rgba(0, 0, 0, 0.08);
         }
 
+        .task.dragging {
+            opacity: 0.5;
+            transform: rotate(1deg);
+        }
+
+        .column.drag-over {
+            outline: 2px dashed #6366f1;
+            outline-offset: -6px;
+        }
+
         .task h3 {
             margin: 0 0 8px;
             font-size: 16px;
@@ -324,6 +334,22 @@
             padding: 8px 2px;
         }
 
+        .drag-handle {
+            cursor: grab;
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            font-size: 20px;
+        }
+        
+        .task {
+            position: relative;
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+
         @media (max-width: 1100px) {
             .board {
                 grid-template-columns: repeat(2, 1fr);
@@ -407,6 +433,7 @@
     <script>
         const API_URL = "http://127.0.0.1:8000";
         const STATUSES = ["open", "todo", "in_progress", "done"];
+        let draggedTaskId = null;
 
         async function checkHealth() {
             const badge = document.getElementById("api-status");
@@ -438,6 +465,31 @@
             });
         }
 
+        function setupColumnDnD() {
+            const columns = document.querySelectorAll(".column");
+
+            columns.forEach((column) => {
+                column.addEventListener("dragover", (event) => {
+                event.preventDefault();
+                column.classList.add("drag-over");
+                });
+
+                column.addEventListener("dragleave", () => {
+                column.classList.remove("drag-over");
+                });
+
+                column.addEventListener("drop", async (event) => {
+                event.preventDefault();
+                column.classList.remove("drag-over");
+
+                if (draggedTaskId === null) return;
+
+                const newStatus = column.dataset.status;
+                await updateTaskStatus(draggedTaskId, newStatus);
+                });
+            });
+        }
+
         function updateCounters(tasks) {
             const counts = {
                 open: 0,
@@ -460,19 +512,23 @@
             card.className = "task";
 
             card.innerHTML = `
-        <h3>${escapeHtml(task.task_name)}</h3>
-        <p>${task.task_description ? escapeHtml(task.task_description) : "Без описания"}</p>
-        <div class="task-actions">
-            <select data-task-id="${task.id}">
-                <option value="open" ${task.status === "open" ? "selected" : ""}>open</option>
-                <option value="todo" ${task.status === "todo" ? "selected" : ""}>todo</option>
-                <option value="in_progress" ${task.status === "in_progress" ? "selected" : ""}>in_progress</option>
-                <option value="done" ${task.status === "done" ? "selected" : ""}>done</option>
-            </select>
-            <button class="edit-btn" data-task-id="${task.id}">Редактировать</button>
-            <button class="delete-btn" data-task-id="${task.id}">Удалить</button>
-        </div>
-      `;
+  <div class="drag-handle" draggable="true">⠿</div>
+
+  <h3>${escapeHtml(task.task_name)}</h3>
+  <p>${task.task_description ? escapeHtml(task.task_description) : "Без описания"}</p>
+
+  <div class="task-actions">
+    <select data-task-id="${task.id}">
+      <option value="open" ${task.status === "open" ? "selected" : ""}>open</option>
+      <option value="todo" ${task.status === "todo" ? "selected" : ""}>todo</option>
+      <option value="in_progress" ${task.status === "in_progress" ? "selected" : ""}>in_progress</option>
+      <option value="done" ${task.status === "done" ? "selected" : ""}>done</option>
+    </select>
+
+    <button class="edit-btn">Редактировать</button>
+    <button class="delete-btn">Удалить</button>
+  </div>
+`;
 
             const select = card.querySelector("select");
             select.addEventListener("change", async (event) => {
@@ -487,6 +543,18 @@
             const deleteBtn = card.querySelector(".delete-btn");
             deleteBtn.addEventListener("click", async () => {
                 await deleteTask(task.id);
+            });
+
+            const handle = card.querySelector(".drag-handle");
+
+            handle.addEventListener("dragstart", () => {
+                draggedTaskId = task.id;
+                card.classList.add("dragging");
+            });
+
+            handle.addEventListener("dragend", () => {
+                draggedTaskId = null;
+                card.classList.remove("dragging");
             });
 
             return card;
@@ -659,6 +727,7 @@
             .getElementById("task-form")
             .addEventListener("submit", createTask);
 
+        setupColumnDnD();
         checkHealth();
         loadTasks();
     </script>

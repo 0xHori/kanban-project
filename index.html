@@ -211,6 +211,19 @@
             outline-offset: -6px;
         }
 
+        .drop-indicator {
+            height: 10px;
+            margin: 4px 0;
+            border-top: 3px solid #6366f1;
+            border-radius: 999px;
+            opacity: 0;
+            transition: opacity 0.12s ease;
+        }
+
+        .drop-indicator.active {
+            opacity: 1;
+        }
+
         .task h3 {
             margin: 0 0 8px;
             font-size: 16px;
@@ -341,7 +354,7 @@
             right: 10px;
             font-size: 20px;
         }
-        
+
         .task {
             position: relative;
         }
@@ -433,7 +446,8 @@
     <script>
         const API_URL = "http://127.0.0.1:8000";
         const STATUSES = ["open", "todo", "in_progress", "done"];
-        let draggedTaskId = null;
+        let draggedTask = null;
+        let currentDropIndicator = null;
 
         async function checkHealth() {
             const badge = document.getElementById("api-status");
@@ -447,6 +461,11 @@
             } catch (error) {
                 badge.textContent = "API: offline";
             }
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString();
         }
 
         function clearColumns() {
@@ -470,25 +489,43 @@
 
             columns.forEach((column) => {
                 column.addEventListener("dragover", (event) => {
-                event.preventDefault();
-                column.classList.add("drag-over");
+                    event.preventDefault();
+                    column.classList.add("drag-over");
+
+                    if (!draggedTask) return;
+
+                    const tasksContainer = column.querySelector(".tasks");
+                    const targetCard = getDropTargetCard(tasksContainer, event.clientY);
+
+                    showDropIndicator(tasksContainer, targetCard);
                 });
 
-                column.addEventListener("dragleave", () => {
-                column.classList.remove("drag-over");
+                column.addEventListener("dragleave", (event) => {
+                    if (!column.contains(event.relatedTarget)) {
+                        column.classList.remove("drag-over");
+                        removeDropIndicator();
+                    }
                 });
 
                 column.addEventListener("drop", async (event) => {
-                event.preventDefault();
-                column.classList.remove("drag-over");
+                    event.preventDefault();
+                    column.classList.remove("drag-over");
 
-                if (draggedTaskId === null) return;
+                    if (!draggedTask) {
+                        removeDropIndicator();
+                        return;
+                    }
 
-                const newStatus = column.dataset.status;
-                await updateTaskStatus(draggedTaskId, newStatus);
+                    const tasksContainer = column.querySelector(".tasks");
+                    const newStatus = column.dataset.status;
+                    const newPosition = calculateNewPosition(tasksContainer, event.clientY);
+
+                    removeDropIndicator();
+                    await moveTask(draggedTask.id, newStatus, newPosition);
                 });
             });
         }
+
 
         function updateCounters(tasks) {
             const counts = {
@@ -507,15 +544,80 @@
             });
         }
 
+
+        function getTaskCardsInColumn(column) {
+            return [...column.querySelectorAll(".task")].filter(
+                (card) => !card.classList.contains("dragging")
+            );
+        }
+
+        function calculateNewPosition(column, mouseY) {
+            const cards = getTaskCardsInColumn(column);
+
+            if (cards.length === 0) {
+                return 100;
+            }
+
+            let targetCard = null;
+
+            for (const card of cards) {
+                const rect = card.getBoundingClientRect();
+                const middleY = rect.top + rect.height / 2;
+
+                if (mouseY < middleY) {
+                    targetCard = card;
+                    break;
+                }
+            }
+
+            if (!targetCard) {
+                const lastCard = cards[cards.length - 1];
+                return Number(lastCard.dataset.position) + 100;
+            }
+
+            const targetIndex = cards.indexOf(targetCard);
+
+            if (targetIndex === 0) {
+                return Number(targetCard.dataset.position) - 100;
+            }
+
+            const prevCard = cards[targetIndex - 1];
+            const prevPosition = Number(prevCard.dataset.position);
+            const nextPosition = Number(targetCard.dataset.position);
+
+            return Math.floor((prevPosition + nextPosition) / 2);
+        }
+
+        function getDropTargetCard(column, mouseY) {
+            const cards = getTaskCardsInColumn(column);
+
+            for (const card of cards) {
+                const rect = card.getBoundingClientRect();
+                const middleY = rect.top + rect.height / 2;
+
+                if (mouseY < middleY) {
+                    return card;
+                }
+            }
+
+            return null;
+        }
+
         function createTaskCard(task) {
             const card = document.createElement("div");
             card.className = "task";
+            card.dataset.taskId = task.id;
+            card.dataset.position = task.position;
 
             card.innerHTML = `
   <div class="drag-handle" draggable="true">⠿</div>
 
   <h3>${escapeHtml(task.task_name)}</h3>
   <p>${task.task_description ? escapeHtml(task.task_description) : "Без описания"}</p>
+  <small>
+    Создано: ${formatDate(task.created_at)}<br>
+    Обновлено: ${formatDate(task.updated_at)}
+  </small>
 
   <div class="task-actions">
     <select data-task-id="${task.id}">
@@ -548,13 +650,17 @@
             const handle = card.querySelector(".drag-handle");
 
             handle.addEventListener("dragstart", () => {
-                draggedTaskId = task.id;
+                draggedTask = task;
                 card.classList.add("dragging");
             });
 
             handle.addEventListener("dragend", () => {
-                draggedTaskId = null;
+                draggedTask = null;
                 card.classList.remove("dragging");
+                removeDropIndicator();
+                document.querySelectorAll(".column").forEach((column) => {
+                    column.classList.remove("drag-over");
+                });
             });
 
             return card;
@@ -588,12 +694,40 @@
             });
         }
 
+        function removeDropIndicator() {
+            if (currentDropIndicator) {
+                currentDropIndicator.remove();
+                currentDropIndicator = null;
+            }
+        }
+
+        function showDropIndicator(tasksContainer, targetCard) {
+            removeDropIndicator();
+
+            const indicator = document.createElement("div");
+            indicator.className = "drop-indicator active";
+
+            if (targetCard) {
+                tasksContainer.insertBefore(indicator, targetCard);
+            } else {
+                tasksContainer.appendChild(indicator);
+            }
+
+            currentDropIndicator = indicator;
+        }
+
         async function loadTasks() {
             try {
                 const response = await fetch(`${API_URL}/tasks`);
                 if (!response.ok) throw new Error("Не удалось загрузить задачи");
 
                 const tasks = await response.json();
+                tasks.sort((a, b) => {
+                    if (a.status === b.status) {
+                        return a.position - b.position;
+                    }
+                    return 0;
+                });
 
                 clearColumns();
                 updateCounters(tasks);
@@ -696,6 +830,28 @@
                 alert("Ошибка при обновлении статуса");
             }
         }
+
+        async function moveTask(taskId, newStatus, newPosition) {
+            try {
+                const response = await fetch(`${API_URL}/tasks/${taskId}/move`, {
+                    method: "PATCH",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        status: newStatus,
+                        position: newPosition,
+                    }),
+                });
+
+                if (!response.ok) throw new Error("Не удалось переместить задачу");
+
+                await loadTasks();
+            } catch (error) {
+                alert("Ошибка при перемещении задачи");
+            }
+        }
+
 
         async function deleteTask(taskId) {
             const confirmed = confirm("Удалить задачу?");

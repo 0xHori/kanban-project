@@ -8,24 +8,28 @@ SCHEMA_PATH = Path("schema.sql")
 
 FIXED_TEST_TASKS = [
     {
-        "task_name": "Задание 1 (Открытое)",
+        "task_name": "Задание 1",
         "task_description": "Сверстать тестовую страницу",
         "status": "open",
+        "position": 100,
     },
     {
-        "task_name": "Задание 2 (Запланированное)",
+        "task_name": "Задание 2",
         "task_description": None,
         "status": "todo",
+        "position": 100,
     },
     {
-        "task_name": "Задание 3 (В процессе)",
+        "task_name": "Задание 3",
         "task_description": "Подключить uvicorn",
         "status": "in_progress",
+        "position": 100,
     },
     {
-        "task_name": "Задание 4 (Выполненное)",
+        "task_name": "Задание 4",
         "task_description": "Подключить базу данных",
         "status": "done",
+        "position": 100,
     },
 ]
 
